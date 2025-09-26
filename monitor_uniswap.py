@@ -30,7 +30,8 @@ def setup_driver():
        chrome_options.add_argument("--no-sandbox")
        chrome_options.add_argument("--disable-dev-shm-usage")
        chrome_options.add_argument("--disable-gpu")
-       chrome_options.add_argument("--remote-debugging-port=9222")
+       chrome_options.add_argument("--window-size=1920,1080")
+       chrome_options.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
        
        service = Service(ChromeDriverManager().install())
        driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -43,11 +44,33 @@ def get_fees_and_range_status(driver):
    try:
        print("Acessando Uniswap...")
        driver.get(UNISWAP_URL)
-       time.sleep(20)
+       time.sleep(30)
        
        page_source = driver.page_source
+       print(f"Página carregada: {len(page_source)} caracteres")
        
-       # Determinar status do range
+       # Debug: procurar por "fees" em geral
+       fees_count = page_source.lower().count('fees')
+       print(f"Palavra 'fees' encontrada {fees_count} vezes")
+       
+       # Debug: procurar todos os valores em dólar
+       patterns = [r'(\d+[,.]?\d*)\s*US\$', r'\$(\d+[,.]?\d*)', r'(\d+[,.]\d+)\s*USD']
+       found_values = []
+       
+       for pattern in patterns:
+           matches = re.findall(pattern, page_source)
+           for match in matches:
+               try:
+                   value = float(str(match).replace(',', '.'))
+                   if 0 <= value <= 10000:
+                       found_values.append(value)
+               except:
+                   continue
+       
+       unique_values = sorted(list(set(found_values)), reverse=True)
+       print(f"Valores encontrados: {[f'${v:.2f}' for v in unique_values[:10]]}")
+       
+       # Status do range
        range_status = "Status desconhecido"
        page_lower = page_source.lower()
        
@@ -62,45 +85,48 @@ def get_fees_and_range_status(driver):
        
        print(f"Status do Range: {range_status}")
        
-       # Procurar pelas seções de fees
+       # Buscar especificamente por "Fees earned"
        fees_value = None
-       fee_keywords = ["Fees earned", "Fees", "Tarifas Recebidas"]
        
-       for keyword in fee_keywords:
-           if keyword in page_source:
-               sections = page_source.split(keyword)
-               if len(sections) > 1:
-                   fees_section = sections[1][:1000]
-                   print(f"✅ Seção '{keyword}' encontrada!")
-                   
-                   patterns = [r'(\d+[,.]?\d*)\s*US\$', r'(\d+[,.]\d+)\s*US\$', r'\$(\d+[,.]?\d*)', r'(\d+[,.]\d+)\s*USD']
-                   
-                   for pattern in patterns:
-                       matches = re.findall(pattern, fees_section)
-                       if matches:
-                           try:
-                               value_str = str(matches[0]).replace(',', '.')
-                               fees_value = float(value_str)
-                               print(f"💰 Valor das Fees: ${fees_value:.2f}")
-                               return fees_value, range_status
-                           except:
-                               continue
+       if "Fees earned" in page_source:
+           print("✅ 'Fees earned' encontrado!")
+           sections = page_source.split('Fees earned')
+           if len(sections) > 1:
+               fees_section = sections[1][:500]
+               print(f"Contexto após 'Fees earned': {fees_section[:200]}...")
+               
+               # Procurar valor na seção
+               for pattern in patterns:
+                   matches = re.findall(pattern, fees_section)
+                   if matches:
+                       try:
+                           value_str = str(matches[0]).replace(',', '.')
+                           fees_value = float(value_str)
+                           print(f"Fees earned: ${fees_value:.2f}")
+                           break
+                       except:
+                           continue
+       else:
+           print("❌ 'Fees earned' NÃO encontrado!")
+           # Tentar pegar o primeiro valor encontrado como fallback
+           if unique_values:
+               fees_value = unique_values[0]
+               print(f"Usando fallback - primeiro valor: ${fees_value:.2f}")
        
-       print("❌ Seções de fees não encontradas!")
-       return None, range_status
+       return fees_value, range_status
            
    except Exception as e:
        print(f"Erro: {e}")
        return None, "Status desconhecido"
 
-# Executar uma única verificação
+# Executar verificação
 driver = setup_driver()
 if driver:
     fees_value, range_status = get_fees_and_range_status(driver)
     
     if fees_value:
-        message = f"🦄 <b>Monitor Uniswap - Check Automático</b>\n\n"
-        message += f"💵 Total disponível: <b>${fees_value:.2f}</b>\n"
+        message = f"🦄 <b>Monitor Uniswap - GitHub Actions</b>\n\n"
+        message += f"💵 Fees earned: <b>${fees_value:.2f}</b>\n\n"
         
         if "🟢" in range_status:
             message += f"🟢 Pool Status: Dentro do Range"
@@ -110,6 +136,11 @@ if driver:
             message += f"Pool Status: {range_status}"
         
         send_telegram_message(message)
-        print(f"Verificação concluída: ${fees_value:.2f}")
+        print(f"✅ Verificação enviada: ${fees_value:.2f}")
+    else:
+        # Enviar debug se não encontrou
+        debug_msg = f"🔧 <b>Debug Nova Pool</b>\n\nNão encontrou fees earned.\nPool: 1091548\nStatus: {range_status}"
+        send_telegram_message(debug_msg)
+        print("❌ Enviado debug para Telegram")
     
     driver.quit()
