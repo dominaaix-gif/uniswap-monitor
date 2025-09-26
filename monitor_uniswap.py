@@ -82,7 +82,7 @@ def get_fees_and_range_status(driver):
                        try:
                            value_str = str(matches[0]).replace(',', '.')
                            fees_value = float(value_str)
-                           print(f"💰 Fees earned: ${fees_value:.2f}")
+                           print(f"💰 Total Disponível para Coleta: ${fees_value:.2f}")
                            break
                        except:
                            continue
@@ -121,7 +121,7 @@ if driver:
     fees_value, range_status = get_fees_and_range_status(driver)
     
     if fees_value:
-        message = f"🦄 <b>Monitor Nova Pool</b>\n\n"
+        message = f"🦄 <b>ALerta de Ganhos</b>\n\n"
         message += f"💵 Fees earned: <b>${fees_value:.2f}</b>\n\n"
         
         if "🟢" in range_status:
