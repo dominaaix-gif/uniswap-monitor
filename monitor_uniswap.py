@@ -64,7 +64,7 @@ def get_fees_and_range_status(driver):
        
        # Procurar pelas seções de fees
        fees_value = None
-       fee_keywords = ["Fees earned", "Fees"]
+       fee_keywords = ["Fees earned", "Fees", "Tarifas Recebidas"]
        
        for keyword in fee_keywords:
            if keyword in page_source:
